@@ -35,6 +35,5 @@ The included validation script (`inverse_sinc_verification.py`) maps the joint g
 To run the execution pipeline locally and generate high-resolution scientific plots with custom color-coded error bars, ensure you have Python 3 with `numpy`, `scipy`, and `matplotlib` installed, then run:
 ```bash
 git clone https://github.com
-cd Preprint-Open-Inverse-Sinc-Time-Modification-Model-the-Hubble-Tension-and-the-S8-Anomaly
-python inverse_sinc_verification.py
+cd Preprint-Open-Inverse-Sinc-Time-Modification-Model-the-Hubble-Tension-and-the-S8-Anomaly python inverse_sinc_verification.py
 ```
