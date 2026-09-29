@@ -73,7 +73,7 @@ obs_z0 = c / (73.50 * r_d)  # Exactly 27.7300
 
 data_points = [
     # Radial Track (DH / rd) - 7 points
-    (0.000, 'DH', obs_z0, 0.311, 'SH0ES (H0=73.5 Calibration)'),
+    (0.000, 'DH', obs_z0, 0.311, 'H0DN (H0=73.5 Calibration)'),
     (0.510, 'DH', 21.863, 0.427, 'DESI DR2'),
     (0.706, 'DH', 19.458, 0.332, 'DESI DR2'),
     (0.922, 'DH', 17.510, 0.280, 'DESI DR2 (Isolated LRG3)'),
@@ -158,7 +158,7 @@ dm_points = [p for p in data_points if p[1] == 'DM']
 # Apply professional plot styling
 plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-fig.suptitle('Cosmological Models Comparison with DESI DR2 & SH0ES Data', fontsize=14, fontweight='bold', y=0.98)
+fig.suptitle('Cosmological Models Comparison with DESI DR2 & H0DN Data', fontsize=14, fontweight='bold', y=0.98)
 
 # Legend flags to prevent duplicate entries
 legend_flags = {'H0': False, 'DESI_DH': False, 'DESI_DM': False}
@@ -169,7 +169,7 @@ ax1.plot(z_dense, dh_res_curve, color='#d62728', linestyle='-', linewidth=2.5, l
 
 # Plot DH experimental points with custom colors
 for z, _, obs, err, source in dh_points:
-    if 'SH0ES' in source or z == 0:
+    if 'H0DN' in source or z == 0:
         lbl = r'$H_0$ Calibration ($z=0$)' if not legend_flags['H0'] else ""
         legend_flags['H0'] = True
         ax1.errorbar(z, obs, yerr=err, fmt='D', color='#FFB300', ecolor='#8B6508', 
