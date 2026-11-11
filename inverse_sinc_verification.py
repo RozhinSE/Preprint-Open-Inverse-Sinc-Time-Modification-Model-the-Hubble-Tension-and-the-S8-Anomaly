@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.integrate import quad
+from scipy.interpolate import CubicSpline
 import matplotlib.pyplot as plt
 
 # =====================================================================
@@ -23,23 +24,48 @@ Om_L_lcdm = 0.681
 # =====================================================================
 # 2. MATHEMATICAL APPARATUS OF THE RESONANT MODEL
 # =====================================================================
+def _solve_self_consistent_k(n_grid=2500, z_max=1e5, tol=1e-13, max_iter=100):
+    """
+    Solves the closed nonlinear integral equation for k(z) via fixed-point iteration:
+    t(z)/T = int_z^inf [k(z') / ((1+z') E(z'))] dz' / int_0^inf [k(z') / ((1+z') E(z'))] dz'
+    alpha(z) = alpha0 * (t(z)/T),  k(z) = alpha(z) / sin(alpha(z))
+    """
+    u_grid = np.linspace(0.0, np.log1p(z_max), n_grid)
+    z_grid = np.expm1(u_grid)
+    E_grid = np.sqrt(Om_m_res * (1.0 + z_grid)**3 + Om_L_res)
+    
+    k_grid = np.ones_like(z_grid)
+    
+    for _ in range(max_iter):
+        integrand = k_grid / E_grid
+        du = np.diff(u_grid)
+        trap_areas = 0.5 * (integrand[:-1] + integrand[1:]) * du
+        t_over_T = np.zeros_like(u_grid)
+        t_over_T[:-1] = np.cumsum(trap_areas[::-1])[::-1]
+        
+        # Normalize by total age integral T at z = 0 (u = 0)
+        t_over_T /= t_over_T[0]
+        
+        alpha_grid = alpha0 * t_over_T
+        k_new = np.where(alpha_grid > 1e-12, alpha_grid / np.sin(alpha_grid), 1.0)
+        
+        if np.max(np.abs(k_new - k_grid)) < tol:
+            k_grid = k_new
+            break
+        k_grid = k_new
+        
+    return CubicSpline(u_grid, k_grid, extrapolate=False)
+
+# Precompute the exact self-consistent k(z) spline once
+_k_spline = _solve_self_consistent_k()
+
 def get_k_factor(z):
-    """Computes the trigonometric time modifier k(z) = 1/sinc(alpha)"""
-    if z > 1000:  # Asymptotic limit for the early Universe (z -> inf)
+    """Computes the self-consistent trigonometric time modifier k(z) = alpha(z)/sin(alpha(z))"""
+    if z <= 0.0:
+        return alpha0 / np.sin(alpha0)
+    if z >= 1e5:  # Asymptotic limit for the early Universe (z -> inf)
         return 1.0
-    
-    # Calculation of dimensionless time phase t/T via arcsinh formula
-    num = np.arcsinh(np.sqrt(Om_L_res / Om_m_res) / (1.0 + z)**1.5)
-    den = np.arcsinh(np.sqrt(Om_L_res / Om_m_res))
-    t_over_T = num / den
-    
-    # Calculation of dynamic argument alpha(z)
-    alpha = alpha0 * t_over_T
-    
-    # Return modifier k(z) = alpha / sin(alpha)
-    if alpha == 0:
-        return 1.0
-    return alpha / np.sin(alpha)
+    return float(_k_spline(np.log1p(z)))
 
 def DH_rd_res(z):
     """Radial distance DH/rd in the Resonant model (with non-linear k(z))"""
@@ -142,32 +168,27 @@ print("="*65)
 # =====================================================================
 # 6. VISUALIZATION BLOCK (HIGH-QUALITY PLOTS WITH ENGLISH LABELS)
 # =====================================================================
-# Generate a dense redshift grid for smooth theoretical curves
 z_dense = np.linspace(0.0, 2.5, 200)
 
-# Compute theoretical curves over the dense grid
 dh_lcdm_curve = [DH_rd_lcdm(z) for z in z_dense]
 dh_res_curve  = [DH_rd_res(z) for z in z_dense]
 dm_lcdm_curve = [DM_rd_lcdm(z) for z in z_dense]
 dm_res_curve  = [DM_rd_res(z) for z in z_dense]
 
-# Separate experimental data points by type (fixed indexing)
+# Separate experimental data points by type
 dh_points = [p for p in data_points if p[1] == 'DH']
 dm_points = [p for p in data_points if p[1] == 'DM']
 
-# Apply professional plot styling
 plt.style.use('seaborn-v0_8-whitegrid' if 'seaborn-v0_8-whitegrid' in plt.style.available else 'default')
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 fig.suptitle('Cosmological Models Comparison with DESI DR2 & H0DN Data', fontsize=14, fontweight='bold', y=0.98)
 
-# Legend flags to prevent duplicate entries
 legend_flags = {'H0': False, 'DESI_DH': False, 'DESI_DM': False}
 
 # --- PLOT 1: Radial Track (DH / rd) ---
 ax1.plot(z_dense, dh_lcdm_curve, color='#2ca02c', linestyle='--', linewidth=2, label=r'$\Lambda$CDM (Best Fit)')
 ax1.plot(z_dense, dh_res_curve, color='#d62728', linestyle='-', linewidth=2.5, label='Resonant Time Model')
 
-# Plot DH experimental points with custom colors
 for z, _, obs, err, source in dh_points:
     if 'H0DN' in source or z == 0:
         lbl = r'$H_0$ Calibration ($z=0$)' if not legend_flags['H0'] else ""
@@ -191,7 +212,6 @@ ax1.legend(frameon=True, facecolor='white', edgecolor='none', fontsize=10, loc='
 ax2.plot(z_dense, dm_lcdm_curve, color='#2ca02c', linestyle='--', linewidth=2, label=r'$\Lambda$CDM (Best Fit)')
 ax2.plot(z_dense, dm_res_curve, color='#d62728', linestyle='-', linewidth=2.5, label='Resonant Time Model')
 
-# Plot DM experimental points (DESI only)
 for z, _, obs, err, source in dm_points:
     lbl = 'DESI DR2 Data' if not legend_flags['DESI_DM'] else ""
     legend_flags['DESI_DM'] = True
@@ -201,9 +221,8 @@ for z, _, obs, err, source in dm_points:
 ax2.set_title('Transverse Track $D_M(z) / r_d$', fontsize=12, fontweight='bold')
 ax2.set_xlabel('Redshift $z$', fontsize=11)
 ax2.set_ylabel('$D_M / r_d$', fontsize=11)
-ax2.set_xlim(0.4, 2.5)  # DM data starts at z = 0.51
+ax2.set_xlim(0.4, 2.5)
 ax2.grid(True, linestyle=':', alpha=0.6)
 ax2.legend(frameon=True, facecolor='white', edgecolor='none', fontsize=10, loc='upper left')
-
 plt.tight_layout()
 plt.show()
